@@ -1,0 +1,53 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+env/
+
+# Build
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+
+# IDE
+.idea/
+.vscode/
+
+# Project-specific generated files
+config.toml
+logs/*
+!logs/.gitkeep
+output/*
+!output/.gitkeep
+models/
+bootstrap.lock
+
+# Cloned dependency (standalone repo)
+Qwen3-TTS/
+
+# User data / samples
+samples/*.wav
+samples/*.webm
+samples/*.txt
+!samples/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+# Core ML — torch/torchaudio installed by bootstrap with CPU index URL
+
+# TUI
+textual>=1.0.0
+rich>=13.0.0
+
+# Utilities
+sounddevice>=0.5.0
+soundfile>=0.12.0
+huggingface_hub>=0.28.0
+scipy>=1.10.0
+
+tomli>=1.1.0 ; python_version < "3.11"

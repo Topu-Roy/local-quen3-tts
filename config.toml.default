@@ -1,0 +1,16 @@
+[model]
+size = "0.6b"
+device = "cpu"
+
+[voice]
+default = "samples/"
+
+[output]
+format = "wav"
+naming = "timestamp"
+folder = "output"
+auto_play = true
+
+[session]
+log_history = true
+show_history = true
