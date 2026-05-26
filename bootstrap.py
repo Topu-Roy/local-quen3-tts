@@ -8,10 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
-import sysconfig
-import tempfile
-import textwrap
-import time
+
 from datetime import datetime
 from pathlib import Path
 
@@ -24,7 +21,7 @@ def _print_step(step: int, total: int, label: str) -> None:
     print(f"[{'='*50}]\n")
 
 
-def _confirm_import(module: str, package: str | None = None) -> None:
+def _confirm_import(module: str, package: str | None = None) -> bool:
     try:
         __import__(module)
         print(f"  ✓ {module} imported successfully")
@@ -56,10 +53,7 @@ def _get_config() -> dict:
             sys.exit(1)
 
     try:
-        if sys.version_info >= (3, 11):
-            import tomllib
-        else:
-            import tomli as tomllib  # type: ignore
+        import tomllib
         with open(config_path, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
@@ -75,15 +69,15 @@ def phase1_env_checks() -> dict:
     _print_step(1, 7, "Environment Checks")
 
     # Python version
-    py_ok = sys.version_info >= (3, 9)
+    py_ok = sys.version_info >= (3, 12)
     if not py_ok:
-        print(f"  ✗ Python {sys.version_info.major}.{sys.version_info.minor} detected, need 3.9+")
+        print(f"  ✗ Python {sys.version_info.major}.{sys.version_info.minor} detected, need 3.12+")
         sys.exit(1)
     print(f"  ✓ Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 
     # Virtual environment
     venv_dir = PROJECT_DIR / "venv"
-    in_venv = sys.prefix != sysconfig.get_default_scheme() or hasattr(sys, "real_prefix")
+    in_venv = sys.prefix != sys.base_prefix
 
     if not venv_dir.exists():
         print("  Creating virtual environment...")
@@ -287,10 +281,7 @@ def _patch_config(updates: dict) -> None:
         return
 
     try:
-        if sys.version_info >= (3, 11):
-            import tomllib
-        else:
-            import tomli as tomllib  # type: ignore
+        import tomllib
         with open(config_path, "rb") as f:
             data = tomllib.load(f)
     except Exception:

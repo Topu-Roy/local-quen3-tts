@@ -8,7 +8,7 @@
 
 - **Core ML** — PyTorch (CPU version), torchaudio, `soundfile` for writing wav output
 - **TUI** — Textual (pinned), Rich (comes with Textual but pin it anyway)
-- **Utilities** — `tomllib` (stdlib in 3.11+, else `tomli` for older Python), `sounddevice` for audio playback, `huggingface_hub` for model download, `scipy` for wav validation
+- **Utilities** — `tomllib` (stdlib in 3.12+), `sounddevice` for audio playback, `huggingface_hub` for model download, `scipy` for wav validation
 
 **Key decision:** Qwen3-TTS is installed from GitHub source (not PyPI). Bootstrap clones `https://github.com/QwenLM/Qwen3-TTS.git` and runs `pip install -e ./Qwen3-TTS`. This is done in Phase 3 after PyTorch is installed.
 

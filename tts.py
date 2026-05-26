@@ -564,10 +564,7 @@ def _load_config() -> dict:
         print("✗ config.toml not found. Run bootstrap.py first.")
         sys.exit(1)
 
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
+    import tomllib
 
     with open(config_path, "rb") as f:
         config = tomllib.load(f)
