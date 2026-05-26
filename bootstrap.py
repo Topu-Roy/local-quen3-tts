@@ -366,33 +366,29 @@ def _download_model(repo_id: str, local_dir: Path, label: str) -> None:
     print(f"  → Saved to {local_dir}")
 
 
+def _has_safetensors(path: Path) -> bool:
+    return path.exists() and bool(list(path.rglob("*.safetensors")))
+
+
 def phase5_model_download(config: dict) -> None:
     _print_step(5, 7, "Model Download")
 
-    model_size = config.get("model", {}).get("size", "0.6b")
-    if model_size not in MODEL_MAP:
-        print(f"  ✗ Unknown model size: {model_size} (valid: 0.6b, 1.7b)")
-        sys.exit(1)
-
-    repo_id, dir_name = MODEL_MAP[model_size]
-    model_dir = MODELS_DIR / dir_name
+    MODELS_DIR.mkdir(exist_ok=True)
     tokenizer_dir = MODELS_DIR / TOKENIZER_DIR
 
-    MODELS_DIR.mkdir(exist_ok=True)
-
-    # Tokenizer
-    if tokenizer_dir.exists() and list(tokenizer_dir.rglob("*.safetensors")):
+    # Tokenizer (shared, download once)
+    if _has_safetensors(tokenizer_dir):
         print(f"  ✓ Tokenizer already downloaded at {tokenizer_dir}")
     else:
         _download_model(TOKENIZER_REPO, tokenizer_dir, "Tokenizer")
 
-    # Base model
-    if model_dir.exists() and list(model_dir.rglob("*.safetensors")):
-        print(f"  ✓ {model_size} model already downloaded at {model_dir}")
-    else:
-        _download_model(repo_id, model_dir, f"{model_size} model")
-        verify_msg = f"  → Run config with model.size = \"{model_size}\""
-        print(verify_msg)
+    # Both models (skip if already present)
+    for size_key, (repo_id, dir_name) in MODEL_MAP.items():
+        model_dir = MODELS_DIR / dir_name
+        if _has_safetensors(model_dir):
+            print(f"  ✓ {size_key} model already downloaded at {model_dir}")
+        else:
+            _download_model(repo_id, model_dir, f"{size_key} model")
 
 
 # ---------------------------------------------------------------------------
@@ -487,14 +483,16 @@ def phase6_sample_validation() -> None:
 def phase7_final_report(config: dict) -> None:
     _print_step(7, 7, "Final Report")
 
-    model_size = config.get("model", {}).get("size", "0.6b")
     samples = list((PROJECT_DIR / "samples").glob("*.wav")) if (PROJECT_DIR / "samples").exists() else []
+
+    downloaded_sizes = [k for k in MODEL_MAP if (MODELS_DIR / MODEL_MAP[k][1]).exists()]
 
     print(f"  ✓ Python {sys.version_info.major}.{sys.version_info.minor}")
     print(f"  ✓ Virtual environment active")
     print(f"  ✓ Dependencies installed")
     print(f"  ✓ Qwen3-TTS source installed")
-    print(f"  ✓ Model: Qwen3-TTS-12Hz-{model_size}-Base")
+    for size_key in downloaded_sizes:
+        print(f"  ✓ Model: Qwen3-TTS-12Hz-{size_key}-Base")
     print(f"  ✓ Tokenizer: Qwen3-TTS-Tokenizer-12Hz")
     print(f"  ✓ Samples: {len(samples)} found")
 
@@ -505,7 +503,7 @@ def phase7_final_report(config: dict) -> None:
     lock = {
         "timestamp": datetime.now().isoformat(),
         "python_version": sys.version,
-        "model_size": model_size,
+        "models": downloaded_sizes,
         "device": "cpu",
         "samples_count": len(samples),
     }

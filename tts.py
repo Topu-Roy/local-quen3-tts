@@ -174,6 +174,30 @@ class ModelEngine:
         self._generation_count += 1
         return wavs, sr
 
+    def reload(self, size: str) -> None:
+        from qwen_tts import Qwen3TTSModel
+        import gc
+
+        dir_name = f"{size}-base"
+        new_dir = PROJECT_DIR / "models" / dir_name
+        if not new_dir.exists():
+            raise FileNotFoundError(f"Model directory not found: {new_dir}")
+
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+        ) as progress:
+            progress.add_task(f"Loading {size} model...", total=None)
+            new_model = Qwen3TTSModel.from_pretrained(
+                str(new_dir), device_map="cpu", dtype=torch.float32,
+            )
+
+        self.model = new_model
+        self.model_dir = str(new_dir)
+        self._prompt_cache.clear()
+        self._active_voice = None
+        gc.collect()
+
     def cancel(self) -> None:
         self._cancelled = True
 
@@ -253,6 +277,59 @@ class VoiceSelector(ModalScreen[str | None]):
             parts = label_str.split("  ", 1)
             if len(parts) == 2:
                 self.dismiss(parts[1])
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+
+# ---------------------------------------------------------------------------
+# TUI — Model Selector Modal
+# ---------------------------------------------------------------------------
+
+class ModelSelector(ModalScreen[str | None]):
+    CSS = """
+    ModelSelector {
+        align: center middle;
+    }
+
+    #model-modal {
+        width: 40;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+        padding: 1;
+    }
+
+    #model-modal > Static {
+        text-style: bold;
+        padding-bottom: 1;
+    }
+
+    .hint {
+        color: $text-muted;
+        padding-top: 1;
+        text-align: center;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="model-modal"):
+            yield Static("Select Model")
+            yield ListView(
+                ListItem(Label("0.6B (faster)")),
+                ListItem(Label("1.7B (better)")),
+                id="model-list",
+            )
+            yield Static("[Esc] Cancel", classes="hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#model-list", ListView).index = 0
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.item:
+            label = str(event.item.query_one(Label).render())
+            self.dismiss("0.6b" if "0.6" in label else "1.7b")
 
     def on_key(self, event) -> None:
         if event.key == "escape":
@@ -359,6 +436,7 @@ class TTSApp(App):
         Binding("f2", "select_voice", "Voice", show=True),
         Binding("f3", "open_folder", "Folder", show=True),
         Binding("f4", "play_last", "Play last", show=True),
+        Binding("f5", "select_model", "Model", show=True),
         Binding("escape", "cancel", "Cancel", show=True),
         Binding("ctrl+q", "quit", "Quit", show=False),
     ]
@@ -376,6 +454,7 @@ class TTSApp(App):
         self.audio_player = audio_player
         self.config = config
         self._last_output: str | None = None
+        self._switching_model = False
 
     def compose(self) -> ComposeResult:
         yield AppHeader()
@@ -425,6 +504,9 @@ class TTSApp(App):
                 self._start_generation(text)
 
     def _start_generation(self, text: str) -> None:
+        if self._switching_model:
+            self.query_one(StatusPanel).state = "Model loading, please wait"
+            return
         if not self.model_engine.active_voice:
             self.query_one(StatusPanel).state = "No voice — press F2 to select"
             return
@@ -551,6 +633,80 @@ class TTSApp(App):
             status.state = "Cancelling..."
         else:
             status.state = "Ready"
+
+    # -- model switching --
+
+    def action_select_model(self) -> None:
+        if self._switching_model:
+            return
+        status = self.query_one(StatusPanel)
+        if status.state == "Generating...":
+            status.state = "Cancel generation first (Esc)"
+            self.set_timer(2.0, lambda: setattr(status, "state", "Ready"))
+            return
+        self.push_screen(ModelSelector(), self._on_model_selected)
+
+    def _on_model_selected(self, result: str | None) -> None:
+        if result is None:
+            return
+        current = self.model_engine.model_size.lower().replace("b", ".", 1)
+        if result == current:
+            return
+        self._start_switch(result)
+
+    def _start_switch(self, size: str) -> None:
+        self._switching_model = True
+        self.query_one("#input-area", TextArea).disabled = True
+        status = self.query_one(StatusPanel)
+        status.state = f"Loading {size} model..."
+        self.switch_worker(size)
+
+    @work(thread=True, exclusive="switch")
+    async def switch_worker(self, size: str) -> None:
+        try:
+            self.model_engine.reload(size)
+            self.call_from_thread(self._on_switch_done, size)
+        except Exception as exc:
+            self.call_from_thread(self._on_switch_error, str(exc))
+
+    def _on_switch_done(self, size: str) -> None:
+        self._switching_model = False
+        self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#input-area", TextArea).focus()
+
+        status = self.query_one(StatusPanel)
+        status.model_size = self.model_engine.model_size
+        status.voice_name = "none"
+        status.voice_status = "✗ (none selected)"
+        status.state = "Ready — voice: press F2"
+
+        header = self.query_one(AppHeader)
+        header.voice_name = "none"
+
+        self.config["model"]["size"] = size
+        self._write_config()
+
+    def _on_switch_error(self, msg: str) -> None:
+        self._switching_model = False
+        self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#input-area", TextArea).focus()
+        self.query_one(StatusPanel).state = f"Switch failed: {msg}"
+
+    def _write_config(self) -> None:
+        config_path = PROJECT_DIR / "config.toml"
+        lines = []
+        for section, values in self.config.items():
+            lines.append(f"[{section}]")
+            for k, v in values.items():
+                if isinstance(v, str):
+                    lines.append(f'{k} = "{v}"')
+                elif isinstance(v, bool):
+                    lines.append(f"{k} = {'true' if v else 'false'}")
+                else:
+                    lines.append(f"{k} = {v}")
+            lines.append("")
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
 
 
 # ---------------------------------------------------------------------------
