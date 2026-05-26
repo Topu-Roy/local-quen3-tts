@@ -15,6 +15,15 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).parent.resolve()
 
 
+def _activation_command() -> str:
+    shell = os.environ.get("SHELL", "")
+    if "fish" in shell:
+        return "source venv/bin/activate.fish"
+    if "csh" in shell or "tcsh" in shell:
+        return "source venv/bin/activate.csh"
+    return "source venv/bin/activate"
+
+
 def _print_step(step: int, total: int, label: str) -> None:
     print(f"\n[{'='*50}]")
     print(f"  Phase {step}/{total}: {label}")
@@ -87,10 +96,8 @@ def phase1_env_checks() -> dict:
         )
         if platform.system() == "Windows":
             print("  → Run: .\\venv\\Scripts\\activate")
-        elif platform.system() == "Darwin":
-            print("  → Run: source venv/bin/activate")
         else:
-            print("  → Run: source venv/bin/activate")
+            print(f"  → Run: {_activation_command()}")
         print("  → Then re-run: python bootstrap.py")
         sys.exit(0)
 
@@ -99,7 +106,7 @@ def phase1_env_checks() -> dict:
         if platform.system() == "Windows":
             print("  → Run: .\\venv\\Scripts\\activate")
         else:
-            print("  → Run: source venv/bin/activate")
+            print(f"  → Run: {_activation_command()}")
         print("  → Then re-run: python bootstrap.py")
         sys.exit(0)
 
