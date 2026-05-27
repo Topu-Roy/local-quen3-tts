@@ -493,15 +493,19 @@ class TTSApp(App):
     # -- input submission --
 
     def on_key(self, event) -> None:
-        if event.key == "enter" and not event.shift:
-            text_area = self.query_one("#input-area", TextArea)
-            if text_area.has_focus:
-                event.stop()
-                text = text_area.text.strip()
-                if not text:
-                    return
-                text_area.text = ""
-                self._start_generation(text)
+        if event.key == "enter":
+            shift = getattr(event, 'shift', None)
+            if shift is None:
+                shift = "shift" in getattr(event, 'modifiers', ())
+            if not shift:
+                text_area = self.query_one("#input-area", TextArea)
+                if text_area.has_focus:
+                    event.stop()
+                    text = text_area.text.strip()
+                    if not text:
+                        return
+                    text_area.text = ""
+                    self._start_generation(text)
 
     def _start_generation(self, text: str) -> None:
         if self._switching_model:
