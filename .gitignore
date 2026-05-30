@@ -43,10 +43,10 @@ bootstrap.lock
 Qwen3-TTS/
 
 # User data / samples
-samples/*.wav
-samples/*.webm
-samples/*.txt
+samples/*
 !samples/.gitkeep
+!samples/voice-one.wav
+!samples/voice-one.txt
 
 # OS
 .DS_Store
