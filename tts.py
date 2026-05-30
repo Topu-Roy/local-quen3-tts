@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import var
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Label, ListItem, ListView, Static, TextArea
+from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Static, TextArea
 
 PROJECT_DIR = Path(__file__).parent.resolve()
 
@@ -176,6 +176,7 @@ class ModelEngine:
 
     def reload(self, size: str) -> None:
         from qwen_tts import Qwen3TTSModel
+        import torch
         import gc
 
         dir_name = f"{size}-base"
@@ -419,12 +420,22 @@ class TTSApp(App):
         padding: 1 2;
     }
 
-    #input-area {
+    #input-row {
         dock: bottom;
+        height: auto;
+        margin: 0 1;
+    }
+
+    #input-area {
         height: 6;
         max-height: 12;
-        margin: 0 1;
         border: solid $secondary;
+    }
+
+    #generate-btn {
+        width: 14;
+        height: 3;
+        margin: 1 0 1 1;
     }
 
     Footer {
@@ -461,7 +472,9 @@ class TTSApp(App):
         with Horizontal(id="main-area"):
             yield HistoryPanel(id="history-panel")
             yield StatusPanel()
-        yield TextArea(id="input-area")
+        with Horizontal(id="input-row"):
+            yield TextArea(id="input-area")
+            yield Button("Generate", id="generate-btn", variant="primary")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -474,7 +487,7 @@ class TTSApp(App):
         self._refresh_voice_status()
 
         text_area = self.query_one("#input-area", TextArea)
-        text_area.placeholder = "Type text and press Enter to generate  |  Shift+Enter for newline"
+        text_area.placeholder = "Type here and press Generate  |  Enter for newline"
 
     def _voice_display_name(self) -> str:
         v = self.model_engine.active_voice
@@ -492,20 +505,14 @@ class TTSApp(App):
 
     # -- input submission --
 
-    def on_key(self, event) -> None:
-        if event.key == "enter":
-            shift = getattr(event, 'shift', None)
-            if shift is None:
-                shift = "shift" in getattr(event, 'modifiers', ())
-            if not shift:
-                text_area = self.query_one("#input-area", TextArea)
-                if text_area.has_focus:
-                    event.stop()
-                    text = text_area.text.strip()
-                    if not text:
-                        return
-                    text_area.text = ""
-                    self._start_generation(text)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "generate-btn":
+            text_area = self.query_one("#input-area", TextArea)
+            text = text_area.text.strip()
+            if not text:
+                return
+            text_area.text = ""
+            self._start_generation(text)
 
     def _start_generation(self, text: str) -> None:
         if self._switching_model:
@@ -524,6 +531,7 @@ class TTSApp(App):
             return
 
         self.query_one("#input-area", TextArea).disabled = True
+        self.query_one("#generate-btn", Button).disabled = True
         self.query_one(StatusPanel).state = "Generating..."
         self.current_text = text
         self.generate_worker(text)
@@ -566,6 +574,7 @@ class TTSApp(App):
 
     def _on_done(self, entry: dict, output_path: str) -> None:
         self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#generate-btn", Button).disabled = False
         self.query_one("#input-area", TextArea).focus()
 
         status = self.query_one(StatusPanel)
@@ -582,6 +591,7 @@ class TTSApp(App):
 
     def _on_cancelled(self) -> None:
         self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#generate-btn", Button).disabled = False
         self.query_one("#input-area", TextArea).focus()
         status = self.query_one(StatusPanel)
         status.state = "Cancelled"
@@ -589,6 +599,7 @@ class TTSApp(App):
 
     def _on_error(self, msg: str) -> None:
         self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#generate-btn", Button).disabled = False
         self.query_one("#input-area", TextArea).focus()
         self.query_one(StatusPanel).state = f"Error: {msg}"
 
@@ -661,6 +672,7 @@ class TTSApp(App):
     def _start_switch(self, size: str) -> None:
         self._switching_model = True
         self.query_one("#input-area", TextArea).disabled = True
+        self.query_one("#generate-btn", Button).disabled = True
         status = self.query_one(StatusPanel)
         status.state = f"Loading {size} model..."
         self.switch_worker(size)
@@ -676,6 +688,7 @@ class TTSApp(App):
     def _on_switch_done(self, size: str) -> None:
         self._switching_model = False
         self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#generate-btn", Button).disabled = False
         self.query_one("#input-area", TextArea).focus()
 
         status = self.query_one(StatusPanel)
@@ -693,6 +706,7 @@ class TTSApp(App):
     def _on_switch_error(self, msg: str) -> None:
         self._switching_model = False
         self.query_one("#input-area", TextArea).disabled = False
+        self.query_one("#generate-btn", Button).disabled = False
         self.query_one("#input-area", TextArea).focus()
         self.query_one(StatusPanel).state = f"Switch failed: {msg}"
 
